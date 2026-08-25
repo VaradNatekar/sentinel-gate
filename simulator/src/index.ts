@@ -1,26 +1,56 @@
 const GATEWAY_URL = "http://localhost:3000";
 
-async function sendRequest(requestNumber: number) {
-  const response = await fetch(`${GATEWAY_URL}/api/results`);
+const TOKEN = "Bearer demo-token";
+
+async function sendRequest(
+  requestNumber: number,
+  ip: string
+) {
+  const response = await fetch(`${GATEWAY_URL}/api/results`, {
+    headers: {
+      Authorization: TOKEN,
+      "X-Forwarded-For": ip,
+    },
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
 
   console.log({
     request: requestNumber,
+    ip,
     status: response.status,
+    data,
   });
 }
 
-async function runBurstTraffic() {
-  console.log("🔥 Starting burst traffic...");
+async function runCombinedAttack() {
+  console.log("🔥 Starting combined attack...");
 
-  const requests = [];
+  const ips = [
+    "10.0.0.1",
+    "10.0.0.2",
+    "10.0.0.3",
+  ];
 
-  for (let i = 1; i <= 80; i++) {
-    requests.push(sendRequest(i));
+  let requestNumber = 1;
+
+  for (const ip of ips) {
+    console.log(`\nUsing IP: ${ip}`);
+
+    for (let i = 0; i < 60; i++) {
+      await sendRequest(requestNumber, ip);
+
+      requestNumber++;
+    }
   }
 
-  await Promise.all(requests);
-
-  console.log("🔥 Burst traffic finished.");
+  console.log("\n🔥 Combined attack finished.");
 }
 
-runBurstTraffic();
+runCombinedAttack();
