@@ -1,6 +1,7 @@
-const MAX_TOKEN_IPS = 2;
+import redisClient from "./redisClient.js";
 
-const tokenIps = new Map<string, Set<string>>();
+const MAX_TOKEN_IPS = 2;
+const TRACKING_TTL_SECONDS = 300;
 
 export interface TokenReuseResult {
   detected: boolean;
@@ -8,10 +9,10 @@ export interface TokenReuseResult {
   reason?: string;
 }
 
-export function detectTokenReuse(
+export async function detectTokenReuse(
   token: string | undefined,
   ip: string
-): TokenReuseResult {
+): Promise<TokenReuseResult> {
   if (!token) {
     return {
       detected: false,
@@ -19,17 +20,21 @@ export function detectTokenReuse(
     };
   }
 
-  const ips = tokenIps.get(token) ?? new Set<string>();
+  const key = `tokenReuse:${token}`;
 
-  ips.add(ip);
+  const added = await redisClient.sAdd(key, ip);
 
-  tokenIps.set(token, ips);
+  if (added === 1) {
+    await redisClient.expire(key, TRACKING_TTL_SECONDS);
+  }
 
-  if (ips.size >= MAX_TOKEN_IPS) {
+  const ipCount = await redisClient.sCard(key);
+
+  if (ipCount >= MAX_TOKEN_IPS) {
     return {
       detected: true,
       score: 20,
-      reason: `API token reused across ${ips.size} IPs`,
+      reason: `API token reused across ${ipCount} IPs`,
     };
   }
 

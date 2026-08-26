@@ -1,6 +1,7 @@
-const MAX_TRACKED_IPS = 3;
+import redisClient from "./redisClient.js";
 
-const clientIps = new Map<string, Set<string>>();
+const MAX_TRACKED_IPS = 3;
+const TRACKING_TTL_SECONDS = 300;
 
 export interface IPRotationResult {
   detected: boolean;
@@ -8,21 +9,25 @@ export interface IPRotationResult {
   reason?: string;
 }
 
-export function detectIPRotation(
+export async function detectIPRotation(
   clientKey: string,
   ip: string
-): IPRotationResult {
-  const ips = clientIps.get(clientKey) ?? new Set<string>();
+): Promise<IPRotationResult> {
+  const key = `ipRotation:${clientKey}`;
 
-  ips.add(ip);
+  const added = await redisClient.sAdd(key, ip);
 
-  clientIps.set(clientKey, ips);
+  if (added === 1) {
+    await redisClient.expire(key, TRACKING_TTL_SECONDS);
+  }
 
-  if (ips.size >= MAX_TRACKED_IPS) {
+  const ipCount = await redisClient.sCard(key);
+
+  if (ipCount >= MAX_TRACKED_IPS) {
     return {
       detected: true,
       score: 25,
-      reason: `Multiple IPs detected for the same client: ${ips.size}`,
+      reason: `Multiple IPs detected for the same client: ${ipCount}`,
     };
   }
 

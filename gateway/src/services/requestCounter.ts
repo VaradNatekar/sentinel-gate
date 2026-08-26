@@ -1,19 +1,15 @@
-const requestCounts = new Map<string, number[]>();
+import redisClient from "./redisClient.js";
 
-const WINDOW_MS = 60_000;
+const WINDOW_SECONDS = 60;
 
-export function recordRequest(clientId: string): number {
-  const now = Date.now();
+export async function recordRequest(clientId: string): Promise<number> {
+  const key = `requests:${clientId}`;
 
-  const timestamps = requestCounts.get(clientId) ?? [];
+  const count = await redisClient.incr(key);
 
-  const recentRequests = timestamps.filter(
-    (timestamp) => now - timestamp < WINDOW_MS
-  );
+  if (count === 1) {
+    await redisClient.expire(key, WINDOW_SECONDS);
+  }
 
-  recentRequests.push(now);
-
-  requestCounts.set(clientId, recentRequests);
-
-  return recentRequests.length;
+  return count;
 }
