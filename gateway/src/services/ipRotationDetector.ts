@@ -24,10 +24,12 @@ export async function detectIPRotation(
   const ipCount = await redisClient.sCard(key);
 
   if (ipCount >= MAX_TRACKED_IPS) {
+    // Scaling penalty: 15 points + 15 for each IP over 2
+    const score = Math.min(100, 15 + ((ipCount - 2) * 15));
     return {
       detected: true,
-      score: 25,
-      reason: `Multiple IPs detected for the same client: ${ipCount}`,
+      score,
+      reason: `IP Rotation detected across ${ipCount} IPs`,
     };
   }
 

@@ -6,8 +6,12 @@ import { DetectionEngineView } from './components/DetectionEngineView';
 import { AttackSimulatorStudio } from './components/AttackSimulatorStudio';
 import { LiveAuditLog } from './components/LiveAuditLog';
 import { EndpointTester } from './components/EndpointTester';
-import { fetchHealth, fetchTelemetry, fetchEvents, resetSystemState } from './services/api';
+import { fetchHealth, fetchTelemetry, fetchEvents, resetSystemState, setSystemMode } from './services/api';
 import { SentinelTelemetry, SystemHealth, SecurityAuditEntry } from './types/sentinel';
+import { ShieldCheck } from 'lucide-react';
+import { ThreatAlertManager } from './components/ThreatAlertManager';
+import { PlatformDialog } from './components/PlatformDialog';
+import { SettingsDialog } from './components/SettingsDialog';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'simulator' | 'tester' | 'engine' | 'audit'>('overview');
@@ -22,6 +26,20 @@ export function App() {
   const [totalEvents, setTotalEvents] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState<{
+    isOpen: boolean;
+    type: 'alert' | 'confirm';
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    type: 'alert',
+    title: '',
+    message: ''
+  });
 
   const loadData = useCallback(async () => {
     try {
@@ -48,12 +66,19 @@ export function App() {
   };
 
   const handleReset = async () => {
-    if (confirm('Are you sure you want to flush all Sentinel Gate Redis threat caches and reset audit logs?')) {
-      setIsResetting(true);
-      await resetSystemState();
-      await loadData();
-      setIsResetting(false);
-    }
+    setIsResetting(true);
+    await resetSystemState();
+    await loadData();
+    setIsResetting(false);
+  };
+
+  const handleCustomModeClick = () => {
+    setDialogConfig({
+      isOpen: true,
+      type: 'alert',
+      title: 'Enterprise License Required',
+      message: 'CUSTOM mode requires an Enterprise License. Please contact your account representative to configure granular tactical rules.'
+    });
   };
 
   // Periodic Telemetry Auto-Polling (every 1.5 seconds)
@@ -63,8 +88,20 @@ export function App() {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  // Only show the screen red vignette if the system is vulnerable (OBSERVE mode)
+  const isCritical = (telemetry?.peakRisk ?? 0) > 80 && telemetry?.systemMode === 'OBSERVE';
+
   return (
-    <div className="min-h-screen bg-[#080b11] text-slate-100 flex flex-col font-sans cyber-grid selection:bg-cyan-500 selection:text-black">
+    <div className="min-h-screen bg-[#080b11] text-slate-100 flex flex-col font-sans cyber-grid selection:bg-cyan-500 selection:text-black relative">
+      
+      {/* Full-Screen Critical Threat Flicker */}
+      {isCritical && (
+        <div className="pointer-events-none fixed inset-0 z-[9999] bg-rose-900/15 shadow-[inset_0_0_250px_rgba(225,29,72,0.3)] animate-[pulse_1.5s_ease-in-out_infinite] mix-blend-screen transition-opacity duration-1000"></div>
+      )}
+      
+      {/* Actionable Threat Alert Manager */}
+      <ThreatAlertManager telemetry={telemetry} onRefresh={handleManualRefresh} />
+
       {/* Top Header */}
       <Header
         health={health}
@@ -75,10 +112,31 @@ export function App() {
         isResetting={isResetting}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        onCustomClick={handleCustomModeClick}
+        onSettingsClick={() => setIsSettingsOpen(true)}
+        showShortcuts={showShortcuts}
+      />
+      
+      {/* Global Platform Dialog */}
+      <PlatformDialog
+        isOpen={dialogConfig.isOpen}
+        type={dialogConfig.type}
+        title={dialogConfig.title}
+        message={dialogConfig.message}
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig(prev => ({ ...prev, isOpen: false }))}
+      />
+      
+      <SettingsDialog 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        showShortcuts={showShortcuts}
+        setShowShortcuts={setShowShortcuts}
       />
 
       {/* Main Dashboard Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 w-full px-4 sm:px-8 lg:px-12 xl:px-16 py-6 space-y-6">
+        
         {/* Tab 1: Overview */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -128,14 +186,6 @@ export function App() {
           <LiveAuditLog events={events} totalEvents={totalEvents} />
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-[#0d131f] py-4 text-center text-xs text-slate-500 font-mono">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Sentinel Gate Security Gateway & Threat Intelligence Engine</span>
-          <span className="text-slate-400">Gateway: <span className="text-cyan-400">:3000</span> | Demo API: <span className="text-purple-400">:4000</span> | Dashboard: <span className="text-emerald-400">:5173</span></span>
-        </div>
-      </footer>
     </div>
   );
 }

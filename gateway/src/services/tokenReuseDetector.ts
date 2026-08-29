@@ -31,9 +31,11 @@ export async function detectTokenReuse(
   const ipCount = await redisClient.sCard(key);
 
   if (ipCount >= MAX_TOKEN_IPS) {
+    // Scaling penalty: 10 points + 20 for each IP over 1
+    const score = Math.min(100, 10 + ((ipCount - 1) * 20));
     return {
       detected: true,
-      score: 20,
+      score,
       reason: `API token reused across ${ipCount} IPs`,
     };
   }

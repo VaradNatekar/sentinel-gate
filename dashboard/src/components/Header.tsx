@@ -1,5 +1,6 @@
 import React from 'react';
-import { Shield, ShieldAlert, ShieldCheck, Database, Server, RefreshCw, Trash2, Radio } from 'lucide-react';
+import { Shield, ShieldAlert, ShieldCheck, Database, Server, RefreshCw, Trash2, Radio, Eye, Settings2, BarChart2, Target, Zap, List, Settings as SettingsIcon } from 'lucide-react';
+import { setSystemMode, runAttackSimulation } from '../services/api';
 import { SystemHealth, SentinelTelemetry, RiskLevel } from '../types/sentinel';
 
 interface HeaderProps {
@@ -11,6 +12,9 @@ interface HeaderProps {
   isResetting: boolean;
   activeTab: 'overview' | 'simulator' | 'tester' | 'engine' | 'audit';
   setActiveTab: (tab: 'overview' | 'simulator' | 'tester' | 'engine' | 'audit') => void;
+  onCustomClick?: () => void;
+  onSettingsClick?: () => void;
+  showShortcuts?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,6 +26,9 @@ export const Header: React.FC<HeaderProps> = ({
   isResetting,
   activeTab,
   setActiveTab,
+  onCustomClick,
+  onSettingsClick,
+  showShortcuts,
 }) => {
   // Determine overall threat level from recent telemetry
   let overallLevel: RiskLevel = 'NORMAL';
@@ -36,41 +43,45 @@ export const Header: React.FC<HeaderProps> = ({
   }
 
   const getThreatBadge = (level: RiskLevel) => {
-    switch (level) {
-      case 'CRITICAL':
-        return (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500 text-rose-400 font-mono text-xs uppercase tracking-wider font-semibold glow-rose animate-pulse">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Threat Level: CRITICAL
-          </div>
-        );
-      case 'HIGH':
-        return (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500 text-amber-400 font-mono text-xs uppercase tracking-wider font-semibold glow-amber">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Threat Level: HIGH
-          </div>
-        );
-      case 'SUSPICIOUS':
-        return (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-500/20 border border-yellow-500 text-yellow-300 font-mono text-xs uppercase tracking-wider font-semibold">
-            <Shield className="w-3.5 h-3.5" />
-            Threat Level: SUSPICIOUS
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 font-mono text-xs uppercase tracking-wider font-semibold glow-emerald">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Status: PROTECTED (NORMAL)
-          </div>
-        );
+    const isAuto = telemetry?.systemMode === 'AUTO' || !telemetry?.systemMode;
+
+    if (level === 'NORMAL') {
+      return (
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 font-mono text-xs uppercase tracking-wider font-semibold glow-emerald">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Status: PROTECTED (NORMAL)
+        </div>
+      );
+    }
+
+    if (isAuto) {
+      // Auto mode blocks threats -> Display as Mitigated
+      return (
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500 text-cyan-400 font-mono text-xs uppercase tracking-wider font-semibold shadow-[0_0_10px_rgba(6,182,212,0.4)]">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          {level} RISK — MITIGATED 🛡️
+        </div>
+      );
+    } else {
+      // Observe mode lets threats through -> Display as Vulnerable
+      const colorClass = level === 'CRITICAL' 
+        ? 'text-rose-400 border-rose-500 bg-rose-500/20 shadow-[0_0_10px_rgba(225,29,72,0.4)] animate-pulse' 
+        : level === 'HIGH' 
+          ? 'text-amber-400 border-amber-500 bg-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.4)] animate-pulse' 
+          : 'text-yellow-400 border-yellow-500 bg-yellow-500/20';
+
+      return (
+        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-xs uppercase tracking-wider font-semibold ${colorClass}`}>
+          <ShieldAlert className="w-3.5 h-3.5" />
+          {level} RISK — VULNERABLE ⚠️
+        </div>
+      );
     }
   };
 
   return (
     <header className="border-b border-slate-800 bg-[#0d131f]/95 backdrop-blur-md sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16">
         <div className="flex flex-col md:flex-row md:items-center justify-between py-3.5 gap-3">
           {/* Brand Logo & Title */}
           <div className="flex items-center gap-3">
@@ -97,7 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             {/* Status Pills */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs font-mono">
-              <div className="flex items-center gap-1.5" title="Sentinel Gateway on Port 3000">
+              <div className="flex items-center gap-1.5" title="Sentinel Gateway on Port 3200">
                 <Radio className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="text-slate-400">Gateway:</span>
                 <span className={health.gateway === 'online' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
@@ -129,15 +140,69 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Threat Badge */}
             {getThreatBadge(overallLevel)}
 
-            {/* Actions */}
-            <div className="flex items-center gap-1.5">
+            {/* Mode Selector - Sleek Pill Design */}
+            <div className="flex items-center bg-[#0a0d14] rounded-full p-1 border border-slate-800/80 shadow-inner">
               <button
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                title="Refresh Telemetry"
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition disabled:opacity-50"
+                onClick={() => setSystemMode('OBSERVE').then(onRefresh)}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase font-bold tracking-widest transition-all duration-300 ${
+                  telemetry?.systemMode === 'OBSERVE'
+                    ? 'bg-gradient-to-r from-rose-950/40 to-transparent text-rose-100 shadow-sm border border-rose-900/30'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
               >
-                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  telemetry?.systemMode === 'OBSERVE' 
+                    ? 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]' 
+                    : 'bg-slate-700'
+                }`}></span>
+                OBSERVE
+              </button>
+              
+              <button
+                onClick={() => setSystemMode('AUTO').then(onRefresh)}
+                className={`relative flex items-center justify-center px-5 py-2 rounded-full text-[11px] uppercase font-bold tracking-widest transition-all duration-300 -mx-1 ${
+                  telemetry?.systemMode === 'AUTO' || !telemetry?.systemMode
+                    ? 'bg-gradient-to-b from-slate-700 to-[#1a1c23] border border-slate-500/50 shadow-[0_4px_12px_rgba(0,0,0,0.5)] text-white z-10 scale-105'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {(telemetry?.systemMode === 'AUTO' || !telemetry?.systemMode) && (
+                  <div className="absolute top-1 w-3 h-0.5 rounded-full bg-slate-400/50 shadow-[0_0_4px_rgba(255,255,255,0.2)]"></div>
+                )}
+                INTELLIGENT
+              </button>
+              
+              <button
+                onClick={onCustomClick}
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase font-bold tracking-widest transition-all duration-300 text-slate-600 hover:text-slate-400 cursor-pointer"
+                title="Requires Enterprise License"
+              >
+                CUSTOM
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-800 border border-slate-700/50"></span>
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              
+              {/* Quick Shortcuts */}
+              {showShortcuts && (
+                <div className="flex items-center gap-1 bg-slate-900/50 rounded-lg p-1 border border-slate-700/50 mr-2 shadow-inner">
+                  <button onClick={() => runAttackSimulation('CLEAN_TRAFFIC', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 transition" title="1. Clean Traffic"><ShieldCheck className="w-4 h-4" /></button>
+                  <button onClick={() => runAttackSimulation('BURST_ATTACK', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-rose-400 hover:text-rose-300 transition" title="2. Burst Attack"><Zap className="w-4 h-4" /></button>
+                  <button onClick={() => runAttackSimulation('IP_ROTATION', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-amber-400 hover:text-amber-300 transition" title="3. IP Rotation"><Radio className="w-4 h-4" /></button>
+                  <button onClick={() => runAttackSimulation('TOKEN_REUSE', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-purple-400 hover:text-purple-300 transition" title="4. Token Reuse"><RefreshCw className="w-4 h-4" /></button>
+                  <button onClick={() => runAttackSimulation('PAYLOAD_INJECTION', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-indigo-400 hover:text-indigo-300 transition" title="5. Payload Injection"><Target className="w-4 h-4" /></button>
+                  <button onClick={() => runAttackSimulation('ENTROPY_PROBE', () => {}, () => false)} className="p-1.5 rounded-md hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 transition" title="6. Entropy Probe"><List className="w-4 h-4" /></button>
+                </div>
+              )}
+
+              <button
+                onClick={onSettingsClick}
+                title="Platform Settings"
+                className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800/40 hover:bg-slate-700/60 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition"
+              >
+                <SettingsIcon className="w-4 h-4" />
               </button>
 
               <button
@@ -154,57 +219,72 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center space-x-1 border-t border-slate-800/60 pt-2 pb-1 overflow-x-auto text-xs font-medium">
+        <div className="flex w-full items-stretch gap-2 border-t border-slate-800/60 pt-3 pb-1 overflow-x-auto text-xs font-semibold uppercase tracking-wider">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-3.5 py-1.5 rounded-md transition ${
+            className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-md transition ${
               activeTab === 'overview'
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold shadow-sm'
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            📊 Security Overview & Telemetry
+            <span className="text-[13px]">📈</span> SECURITY OVERVIEW
           </button>
+          
+          <span className="text-slate-700 flex items-center font-light">|</span>
+
           <button
             onClick={() => setActiveTab('simulator')}
-            className={`px-3.5 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+            className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-md transition ${
               activeTab === 'simulator'
-                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 font-semibold shadow-sm'
+                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-            ⚔️ Attack Simulator Studio
+            <div className="relative flex items-center justify-center mr-0.5">
+              <span className="absolute w-2 h-2 rounded-full bg-rose-500 animate-ping opacity-75"></span>
+              <span className="relative w-2 h-2 rounded-full bg-rose-500"></span>
+            </div>
+            <span className="text-[13px]">🎯</span> ATTACK SIMULATOR
           </button>
-          <button
-            onClick={() => setActiveTab('engine')}
-            className={`px-3.5 py-1.5 rounded-md transition ${
-              activeTab === 'engine'
-                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-semibold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            🛡️ Detection Engine & Rules
-          </button>
+          
+          <span className="text-slate-700 flex items-center font-light">|</span>
+
           <button
             onClick={() => setActiveTab('tester')}
-            className={`px-3.5 py-1.5 rounded-md transition ${
+            className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-md transition ${
               activeTab === 'tester'
-                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30 font-semibold shadow-sm'
+                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            ⚡ API Gateway Proxy Tester
+            <span className="text-[13px]">⚡</span> GATEWAY TESTER
           </button>
+          
+          <span className="text-slate-700 flex items-center font-light">|</span>
+
           <button
             onClick={() => setActiveTab('audit')}
-            className={`px-3.5 py-1.5 rounded-md transition ${
+            className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-md transition ${
               activeTab === 'audit'
-                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold shadow-sm'
+                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            📜 Live Audit Log Feed
+            <span className="text-[13px]">📋</span> LIVE AUDIT LOG
+          </button>
+          
+          <span className="text-slate-700 flex items-center font-light">|</span>
+
+          <button
+            onClick={() => setActiveTab('engine')}
+            className={`flex-1 flex justify-center items-center gap-2 py-2.5 rounded-md transition ${
+              activeTab === 'engine'
+                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span className="text-[13px]">⚙️</span> DETECTION ENGINE
           </button>
         </div>
       </div>

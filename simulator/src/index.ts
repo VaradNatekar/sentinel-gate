@@ -1,4 +1,4 @@
-const GATEWAY_URL = "http://localhost:3000";
+const GATEWAY_URL = "http://localhost:3200";
 
 const TOKEN = "Bearer demo-token";
 

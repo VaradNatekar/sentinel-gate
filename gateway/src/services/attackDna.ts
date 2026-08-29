@@ -6,6 +6,8 @@ export type AttackType =
   | "BURST_ABUSE"
   | "IP_ROTATION_ABUSE"
   | "TOKEN_REUSE_ABUSE"
+  | "PAYLOAD_INJECTION"
+  | "OBFUSCATED_PAYLOAD"
   | "MULTI_SIGNAL_API_ABUSE"
   | "COORDINATED_API_ABUSE";
 
@@ -59,10 +61,20 @@ export function buildAttackDNA(
     (signal) => signal.name === "businessFlow"
   );
 
+  const payloadThreatDetected = detectedSignals.some(
+    (signal) => signal.name === "payloadThreat"
+  );
+
+  const entropyDetected = detectedSignals.some(
+    (signal) => signal.name === "entropy"
+  );
+
   const abuseSignalCount =
     Number(burstDetected) +
     Number(ipRotationDetected) +
-    Number(tokenReuseDetected);
+    Number(tokenReuseDetected) +
+    Number(payloadThreatDetected) +
+    Number(entropyDetected);
 
   // ------------------------------------------------
   // Classification
@@ -93,6 +105,29 @@ export function buildAttackDNA(
     confidence = "HIGH";
     reason =
       "Burst activity, IP rotation, and token reuse were detected simultaneously.";
+  }
+
+  // Payload injection detected
+  else if (payloadThreatDetected) {
+    if (abuseSignalCount >= 2) {
+      attackType = "COORDINATED_API_ABUSE";
+      confidence = "HIGH";
+      reason =
+        "Payload injection detected alongside other abuse signals — coordinated attack.";
+    } else {
+      attackType = "PAYLOAD_INJECTION";
+      confidence = "HIGH";
+      reason =
+        "Malicious payload detected (SQLi, XSS, Command Injection, or Path Traversal).";
+    }
+  }
+
+  // High entropy / obfuscated payload
+  else if (entropyDetected) {
+    attackType = "OBFUSCATED_PAYLOAD";
+    confidence = "MEDIUM";
+    reason =
+      "Request contains high-entropy content suggesting encoded or obfuscated payloads.";
   }
 
   // Multiple abuse signals

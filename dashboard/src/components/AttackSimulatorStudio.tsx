@@ -116,30 +116,41 @@ export const AttackSimulatorStudio: React.FC<AttackSimulatorStudioProps> = ({
       requests: '36 requests',
     },
     {
-      id: 'COMBINED_STORM' as AttackPresetType,
-      title: '5. Combined Multi-Vector Storm',
-      badge: 'HIGH / THROTTLE (429)',
-      badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500 font-bold',
-      icon: Flame,
-      iconColor: 'text-rose-500',
-      description: 'Executes the full combined attack suite (Burst + IP Rotation + Token Reuse) triggering automatic Sentinel throttling.',
-      signals: 'Burst (30) + IP Rotation (25) + Token Reuse (20) = 75 (THROTTLE)',
-      requests: '120 requests',
+      id: 'PAYLOAD_INJECTION' as AttackPresetType,
+      title: '5. Injection Attack Suite',
+      badge: 'SQLi / XSS / CMDi (403)',
+      badgeColor: 'bg-orange-500/10 text-orange-400 border-orange-500/30 font-bold',
+      icon: Terminal,
+      iconColor: 'text-orange-400',
+      description: 'Fires 10 real injection payloads: SQL injection (UNION, OR bypass, time-based blind), XSS (script, img onerror), command injection, path traversal, and template injection.',
+      signals: 'Payload Threat (35-40) → BLOCK',
+      requests: '10 payloads',
+    },
+    {
+      id: 'ENTROPY_PROBE' as AttackPresetType,
+      title: '6. Obfuscation Entropy Probe',
+      badge: 'ENTROPY ANALYSIS',
+      badgeColor: 'bg-teal-500/10 text-teal-400 border-teal-500/30 font-bold',
+      icon: Sparkles,
+      iconColor: 'text-teal-400',
+      description: 'Sends payloads with increasing Shannon entropy (normal text → base64 → hex-encoded → random bytes) to test obfuscation detection.',
+      signals: 'Entropy (15-25) → MONITOR/THROTTLE',
+      requests: '5 probes',
     },
   ];
 
   return (
     <div className="space-y-6">
       {/* Studio Header */}
-      <div className="p-5 rounded-xl bg-[#0f1626] border border-slate-800 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 rounded-xl bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-slate-900 border border-rose-900/40 mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Flame className="w-5 h-5 text-rose-500" />
-              Attack Simulation & Adversary Emulation Studio
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              Adversary Emulation Studio
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Select an attack vector below to inject synthetic threat traffic into Sentinel Gate in real-time.
+            <p className="text-xs text-slate-300 mt-0.5 max-w-2xl">
+              Inject synthetic threat vectors directly into the Sentinel Gate engine to validate mitigation logic in real-time.
             </p>
           </div>
 
@@ -182,9 +193,13 @@ export const AttackSimulatorStudio: React.FC<AttackSimulatorStudioProps> = ({
           return (
             <div
               key={preset.id}
-              className={`p-4 rounded-xl bg-[#0f1626] border transition flex flex-col justify-between ${
+              className={`p-4 rounded-xl border transition flex flex-col justify-between ${
+                preset.id === 'COMBINED_STORM' ? 'bg-red-950/20' : 'bg-[#0f1626]'
+              } ${
                 isThisRunning
                   ? 'border-cyan-500 glow-cyan ring-1 ring-cyan-500'
+                  : preset.id === 'COMBINED_STORM'
+                  ? 'border-red-900/40 hover:border-red-800'
                   : 'border-slate-800 hover:border-slate-700'
               }`}
             >
@@ -221,11 +236,7 @@ export const AttackSimulatorStudio: React.FC<AttackSimulatorStudioProps> = ({
                 <button
                   onClick={() => startSimulation(preset.id)}
                   disabled={isRunning}
-                  className={`w-full py-2 px-3 rounded-lg font-mono text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-40 ${
-                    preset.id === 'COMBINED_STORM'
-                      ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-900/30'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700'
-                  }`}
+                  className="w-full py-2 px-3 rounded-lg font-mono text-xs font-semibold flex items-center justify-center gap-2 transition disabled:opacity-40 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700"
                 >
                   {isThisRunning ? (
                     <>

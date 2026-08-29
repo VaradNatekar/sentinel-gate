@@ -62,7 +62,7 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ telemetry }) => {
           <span className={`text-3xl font-bold font-mono ${peakRisk > 60 ? 'text-rose-400' : peakRisk > 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
             {peakRisk}
           </span>
-          <span className="text-xs text-slate-400">/ 100 max</span>
+          <span className="text-xs text-slate-400">/ 100</span>
         </div>
         <div className="mt-3 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
           <div
@@ -97,10 +97,10 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ telemetry }) => {
         </div>
         <div className="mt-3 flex items-center justify-between text-xs font-mono pt-2 border-t border-slate-800/80">
           <span className="text-amber-400" title="HTTP 429 Too Many Requests">
-            429 Throttled: {throttled}
+            Throttled: {throttled}
           </span>
           <span className="text-rose-400" title="HTTP 403 Forbidden Blocked">
-            403 Blocked: {blocked}
+            Blocked: {blocked}
           </span>
         </div>
       </div>
@@ -131,7 +131,7 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ telemetry }) => {
             <div className="font-bold text-purple-400">{rotationCount}</div>
           </div>
           <div className="p-1 rounded bg-slate-900 border border-slate-800" title="Token reuse across multiple IPs">
-            <div className="text-slate-400 text-[9px]">Tokens</div>
+            <div className="text-slate-400 text-[9px]">Auth Abuse</div>
             <div className="font-bold text-rose-400">{tokenReuseCount}</div>
           </div>
         </div>

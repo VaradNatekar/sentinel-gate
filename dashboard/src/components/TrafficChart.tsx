@@ -7,10 +7,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  PieChart,
+  Pie,
   Cell,
-  Legend,
 } from 'recharts';
 import { Activity, PieChart as PieIcon } from 'lucide-react';
 import { SentinelTelemetry, SecurityAuditEntry } from '../types/sentinel';
@@ -88,6 +87,13 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({ telemetry, events })
       desc: 'Score 81-100 (Block)',
     },
   ];
+
+  const totalRiskCount = riskDistributionData.reduce((sum, item) => sum + item.count, 0);
+  
+  // Fallback to a gray pie if no traffic has been evaluated yet
+  const displayPieData = totalRiskCount === 0 
+    ? [{ name: 'No Data Yet', count: 1, color: '#1e293b' }] 
+    : riskDistributionData.filter(item => item.count > 0); // Only show slices with > 0 for cleaner UI
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -171,33 +177,51 @@ export const TrafficChart: React.FC<TrafficChartProps> = ({ telemetry, events })
               <PieIcon className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white">Risk Evaluation Matrix</h3>
-              <p className="text-[11px] text-slate-400">Classification of all evaluated requests</p>
+              <h3 className="text-sm font-semibold text-white">Threat Risk Distribution</h3>
+              <p className="text-[11px] text-slate-400">Proportion of requests by severity level</p>
             </div>
           </div>
         </div>
 
-        <div className="h-44 w-full">
+        <div className="h-44 w-full flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={riskDistributionData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-              <XAxis type="number" stroke="#64748b" fontSize={10} />
-              <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} tickLine={false} width={75} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0d131f',
-                  borderColor: '#1e293b',
-                  borderRadius: '0.5rem',
-                  fontSize: '11px',
-                  color: '#f8fafc',
-                }}
-              />
-              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                {riskDistributionData.map((entry, index) => (
+            <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+              <Pie
+                data={displayPieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={75}
+                paddingAngle={displayPieData.length <= 1 ? 0 : 4}
+                dataKey="count"
+                stroke="none"
+                cornerRadius={4}
+                isAnimationActive={true}
+                animationBegin={0}
+                animationDuration={1000}
+                animationEasing="ease-out"
+              >
+                {displayPieData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
-              </Bar>
-            </BarChart>
+              </Pie>
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  if (name === 'No Data Yet') return ['Awaiting traffic...', 'Status'];
+                  return [`${value} Requests`, name];
+                }}
+                contentStyle={{
+                  backgroundColor: 'rgba(30, 41, 59, 0.95)', // lighter slate-800 background
+                  borderColor: '#475569', // slate-600 border
+                  borderRadius: '0.5rem',
+                  fontSize: '12px',
+                  color: '#ffffff',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.8)',
+                }}
+                itemStyle={{ color: '#f8fafc', fontWeight: 'bold' }}
+                labelStyle={{ color: '#cbd5e1', marginBottom: '4px' }}
+              />
+            </PieChart>
           </ResponsiveContainer>
         </div>
 

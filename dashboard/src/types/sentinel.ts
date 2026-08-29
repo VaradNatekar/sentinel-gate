@@ -27,6 +27,7 @@ export interface SecurityAuditEntry {
   risk: RiskResult;
   status: number;
   durationMs?: number;
+  wasObserved?: boolean;
 }
 
 export interface SentinelTelemetry {
@@ -41,6 +42,7 @@ export interface SentinelTelemetry {
     ipRotation: number;
     tokenReuse: number;
   };
+  systemMode: 'OBSERVE' | 'AUTO' | 'CUSTOM';
   riskDistribution: {
     NORMAL: number;
     SUSPICIOUS: number;

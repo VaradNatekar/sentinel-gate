@@ -46,7 +46,7 @@ export const EndpointTester: React.FC = () => {
           <div>
             <h2 className="text-base font-bold text-white">Gateway Proxy Request Studio</h2>
             <p className="text-xs text-slate-400">
-              Send test HTTP calls through Sentinel Gate (:3000) and inspect proxy forwarding to Demo API (:4000).
+              Send test HTTP calls through Sentinel Gate (:3200) and inspect proxy forwarding to Demo API (:4200).
             </p>
           </div>
         </div>

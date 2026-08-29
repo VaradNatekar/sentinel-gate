@@ -19,11 +19,13 @@ import {
   simulateCounterfactual,
   type CounterfactualScenario,
 } from "./services/counterfactualDefense.js";
+import { inspectPayload } from "./services/payloadInspector.js";
+import { analyzeEntropy } from "./services/entropyAnalyzer.js";
 
 const app = express();
 
-const PORT = 3000;
-const DEMO_API_URL = "http://localhost:4000";
+const PORT = 3200;
+const DEMO_API_URL = "http://localhost:4200";
 
 // ----------------------------------------------------
 // Middleware
@@ -64,6 +66,7 @@ export interface SecurityAuditEntry {
   businessFlow: ReturnType<typeof detectBusinessFlowRisk>;
   status: number;
   durationMs?: number;
+  wasObserved?: boolean;
 }
 
 const MAX_EVENT_HISTORY = 200;
@@ -81,6 +84,8 @@ const previousDecisions = new Map<
 >();
 
 // Aggregated telemetry counters
+let systemMode: 'OBSERVE' | 'AUTO' | 'CUSTOM' = 'AUTO';
+
 const telemetry = {
   startTime: new Date().toISOString(),
   totalRequests: 0,
@@ -93,6 +98,8 @@ const telemetry = {
     burst: 0,
     ipRotation: 0,
     tokenReuse: 0,
+    payloadThreat: 0,
+    highEntropy: 0,
   },
 
   riskDistribution: {
@@ -184,6 +191,7 @@ app.get("/api/sentinel/telemetry", async (_req, res) => {
 
   res.json({
     ...telemetry,
+    systemMode,
     activeRedisKeys: activeRedisKeysCount,
     trackedIps,
     recentAvgRisk: avgRisk,
@@ -277,6 +285,20 @@ app.post("/api/sentinel/counterfactual", (req, res) => {
   }
 });
 // ----------------------------------------------------
+// System Mode Switcher
+// ----------------------------------------------------
+
+app.post("/api/sentinel/mode", (req, res) => {
+  const { mode } = req.body;
+  if (["OBSERVE", "AUTO", "CUSTOM"].includes(mode)) {
+    systemMode = mode as "OBSERVE" | "AUTO" | "CUSTOM";
+    res.json({ success: true, mode: systemMode });
+  } else {
+    res.status(400).json({ error: "Invalid mode" });
+  }
+});
+
+// ----------------------------------------------------
 // Reset System State
 // ----------------------------------------------------
 
@@ -302,6 +324,8 @@ app.post("/api/sentinel/reset", async (_req, res) => {
     telemetry.signalsTriggered.burst = 0;
     telemetry.signalsTriggered.ipRotation = 0;
     telemetry.signalsTriggered.tokenReuse = 0;
+    telemetry.signalsTriggered.payloadThreat = 0;
+    telemetry.signalsTriggered.highEntropy = 0;
 
     telemetry.riskDistribution.NORMAL = 0;
     telemetry.riskDistribution.SUSPICIOUS = 0;
@@ -366,13 +390,14 @@ app.use(async (req, res, next) => {
     const hasToken = Boolean(token);
 
     // ------------------------------------------------
-    // Existing detection pipeline
+    // Detection Pipeline
     // ------------------------------------------------
 
     const requestCount = await recordRequest(ip);
 
-    const clientKey =
-      token || `${userAgent}:${req.originalUrl}`;
+    // Fixed: Use IP as primary client key for rate limiting.
+    // Previous: token || `${userAgent}:${req.originalUrl}` — incorrectly grouped all anonymous users.
+    const clientKey = token || ip;
 
     const ipRotation = await detectIPRotation(
       clientKey,
@@ -394,7 +419,27 @@ app.use(async (req, res, next) => {
       detectBusinessFlowRisk(req.path);
 
     // ------------------------------------------------
-    // Risk calculation
+    // Payload Inspection (SQLi, XSS, CMDi, Path Traversal)
+    // ------------------------------------------------
+
+    const payloadResult = inspectPayload(
+      req.path,
+      req.query as Record<string, any>,
+      req.body,
+      req.headers as Record<string, string | string[] | undefined>
+    );
+
+    // ------------------------------------------------
+    // Entropy Analysis (obfuscated payload detection)
+    // ------------------------------------------------
+
+    const entropyResult = analyzeEntropy(
+      req.query as Record<string, any>,
+      req.body
+    );
+
+    // ------------------------------------------------
+    // Risk calculation (6 signals)
     // ------------------------------------------------
 
     const risk = calculateRisk([
@@ -417,6 +462,16 @@ app.use(async (req, res, next) => {
         name: "businessFlow",
         score: businessFlow.score,
         detected: businessFlow.score > 0,
+      },
+      {
+        name: "payloadThreat",
+        score: payloadResult.score,
+        detected: payloadResult.detected,
+      },
+      {
+        name: "entropy",
+        score: entropyResult.score,
+        detected: entropyResult.detected,
       },
     ]);
 
@@ -485,6 +540,14 @@ app.use(async (req, res, next) => {
       telemetry.signalsTriggered.tokenReuse++;
     }
 
+    if (payloadResult.detected) {
+      telemetry.signalsTriggered.payloadThreat++;
+    }
+
+    if (entropyResult.detected) {
+      telemetry.signalsTriggered.highEntropy++;
+    }
+
     switch (risk.action) {
       case "ALLOW":
         telemetry.allowedRequests++;
@@ -528,27 +591,31 @@ app.use(async (req, res, next) => {
     // Enforcement
     // ------------------------------------------------
 
-    const allowed = enforceRisk(risk, res);
+    auditEntry.wasObserved = systemMode === 'OBSERVE';
 
-    if (!allowed) {
-      auditEntry.status =
-        risk.action === "BLOCK"
-          ? 403
-          : 429;
+    if (systemMode !== 'OBSERVE') {
+      const allowed = enforceRisk(risk, res);
 
-      auditEntry.durationMs =
-        Date.now() - startTime;
+      if (!allowed) {
+        auditEntry.status =
+          risk.action === "BLOCK"
+            ? 403
+            : 429;
 
-      securityEvents.push(auditEntry);
+        auditEntry.durationMs =
+          Date.now() - startTime;
 
-      if (
-        securityEvents.length >
-        MAX_EVENT_HISTORY
-      ) {
-        securityEvents.shift();
+        securityEvents.push(auditEntry);
+
+        if (
+          securityEvents.length >
+          MAX_EVENT_HISTORY
+        ) {
+          securityEvents.shift();
+        }
+
+        return;
       }
-
-      return;
     }
 
     // ------------------------------------------------
@@ -629,7 +696,10 @@ app.all(/^\/api\/.*/, async (req, res) => {
 
     const response = await fetch(
       targetUrl,
-      fetchOptions
+      {
+        ...fetchOptions,
+        signal: AbortSignal.timeout(8000),
+      }
     );
 
     const data = await response

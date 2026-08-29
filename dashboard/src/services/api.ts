@@ -1,6 +1,6 @@
 import { SecurityAuditEntry, SentinelTelemetry, SystemHealth, SimulationResult } from '../types/sentinel';
 
-const GATEWAY_URL = 'http://localhost:3000';
+const GATEWAY_URL = 'http://localhost:3200';
 
 export async function fetchHealth(): Promise<SystemHealth> {
   try {
@@ -68,6 +68,20 @@ export async function resetSystemState(): Promise<boolean> {
     return res.ok;
   } catch (err) {
     console.error('Failed to reset system state:', err);
+    return false;
+  }
+}
+
+export async function setSystemMode(mode: 'OBSERVE' | 'AUTO' | 'CUSTOM'): Promise<boolean> {
+  try {
+    const res = await fetch(`${GATEWAY_URL}/api/sentinel/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Failed to set system mode:', err);
     return false;
   }
 }
@@ -145,6 +159,8 @@ export type AttackPresetType =
   | 'BURST_ATTACK'
   | 'IP_ROTATION'
   | 'TOKEN_REUSE'
+  | 'PAYLOAD_INJECTION'
+  | 'ENTROPY_PROBE'
   | 'COMBINED_STORM';
 
 export async function runAttackSimulation(
@@ -254,6 +270,63 @@ export async function runAttackSimulation(
           reqNumber++;
           await new Promise((r) => setTimeout(r, 45));
         }
+      }
+      break;
+    }
+
+    case 'PAYLOAD_INJECTION': {
+      // Diverse injection attacks: SQLi, XSS, Command Injection, Path Traversal
+      const payloads = [
+        { method: 'GET', path: '/api/search?q=1%27%20OR%201=1--', desc: 'SQLi (basic OR bypass)' },
+        { method: 'POST', path: '/api/login', body: { username: "admin' OR '1'='1", password: "test" }, desc: 'SQLi (login bypass)' },
+        { method: 'POST', path: '/api/results', body: { name: '<script>document.cookie</script>' }, desc: 'XSS (script tag)' },
+        { method: 'POST', path: '/api/results', body: { data: '<img src=x onerror=alert(1)>' }, desc: 'XSS (img onerror)' },
+        { method: 'GET', path: '/api/results?file=../../../../etc/passwd', desc: 'Path Traversal' },
+        { method: 'POST', path: '/api/results', body: { cmd: '; cat /etc/passwd' }, desc: 'Command Injection' },
+        { method: 'POST', path: '/api/results', body: { query: "SELECT * FROM users; DROP TABLE users;--" }, desc: 'SQLi (DROP TABLE)' },
+        { method: 'POST', path: '/api/results', body: { input: 'UNION SELECT username, password FROM admin_users--' }, desc: 'SQLi (UNION attack)' },
+        { method: 'POST', path: '/api/payment', body: { amount: "100; WAITFOR DELAY '0:0:5'" }, desc: 'SQLi Time-based blind (critical endpoint)' },
+        { method: 'POST', path: '/api/results', body: { template: '{{7*7}}' }, desc: 'SSTI (Template Injection)' },
+      ];
+      const total = payloads.length;
+      for (let i = 0; i < total; i++) {
+        if (shouldStop()) break;
+        const p = payloads[i];
+        const res = await sendProxyRequest(p.path, {
+          method: p.method,
+          ip: '203.0.113.66',
+          userAgent: 'Sentinel-PayloadTest/1.0',
+          body: p.body,
+        });
+        res.request = i + 1;
+        onProgress(res, i + 1, total);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      break;
+    }
+
+    case 'ENTROPY_PROBE': {
+      // Sends payloads with increasing entropy to test obfuscation detection
+      const probes = [
+        { data: 'Hello, this is normal text with low entropy.', desc: 'Normal text (low entropy)' },
+        { data: 'dXNlcm5hbWU9YWRtaW4mcGFzc3dvcmQ9JTI3JTIwT1IlMjAlMjcxJTI3PSUyNzE=', desc: 'Base64-encoded SQLi' },
+        { data: '4d5a90000300000004000000ffff0000b80000000000000040000000000000003c2f7363726970743e', desc: 'Hex-encoded payload' },
+        { data: 'aGVsbG8gd29ybGQgZnJvbSBhIGJhc2U2NCBlbmNvZGVkIHBheWxvYWQ=', desc: 'Base64 text' },
+        { data: 'x9fK2Lj7pQ3mRvYw8sTnBc0ZeOdAiHuXl4VgEkJ6NhDqFP5UM1arWyCbSoGIt', desc: 'High randomness string' },
+      ];
+      const total = probes.length;
+      for (let i = 0; i < total; i++) {
+        if (shouldStop()) break;
+        const p = probes[i];
+        const res = await sendProxyRequest('/api/results', {
+          method: 'POST',
+          ip: '198.51.100.77',
+          userAgent: 'Entropy-Probe/2.0',
+          body: { payload: p.data, description: p.desc },
+        });
+        res.request = i + 1;
+        onProgress(res, i + 1, total);
+        await new Promise((r) => setTimeout(r, 400));
       }
       break;
     }

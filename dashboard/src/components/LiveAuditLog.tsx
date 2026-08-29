@@ -204,7 +204,14 @@ export const LiveAuditLog: React.FC<LiveAuditLogProps> = ({ events, totalEvents 
                         )}
                       </td>
                       <td className="py-2.5 px-3">{getRiskBadge(entry.risk.level, entry.risk.score)}</td>
-                      <td className="py-2.5 px-3 font-bold text-slate-200">{entry.risk.action}</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-200 flex items-center gap-2 mt-1">
+                        {entry.risk.action}
+                        {entry.wasObserved && (
+                          <span className="text-[9px] text-amber-400 font-normal border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 rounded">
+                            OBSERVED
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2.5 px-3">{getStatusBadge(entry.status)}</td>
                       <td className="py-2.5 px-3 text-right text-slate-500">
                         {isExpanded ? <ChevronUp className="w-4 h-4 inline" /> : <ChevronDown className="w-4 h-4 inline" />}
